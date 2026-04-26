@@ -157,6 +157,14 @@
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       }
 
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 48px;
+        padding: 0 4px;
+      }
+
       label {
         display: block;
         margin-bottom: 8px;
@@ -311,6 +319,48 @@
         background: rgba(29, 26, 22, 0.08);
       }
 
+      .sources {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(29, 26, 22, 0.09);
+      }
+
+      .sources-title {
+        margin: 0 0 10px;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .source-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .source-card {
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(29, 26, 22, 0.08);
+        background: rgba(255, 255, 255, 0.55);
+      }
+
+      .source-card a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .source-card a:hover {
+        text-decoration: underline;
+      }
+
+      .source-snippet {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.94rem;
+        line-height: 1.45;
+      }
+
       .composer {
         padding: 16px;
         border: 1px solid var(--border);
@@ -385,6 +435,17 @@
               <label for="system">System prompt</label>
               <input id="system" value="You are a helpful local AI assistant." />
             </div>
+            <div>
+              <label for="use-web-search">Web research</label>
+              <div class="checkbox-row">
+                <input id="use-web-search" type="checkbox" style="width: auto;" />
+                <span>Use latest internet sources for this chat</span>
+              </div>
+            </div>
+            <div>
+              <label for="web-search-query">Search query override</label>
+              <input id="web-search-query" placeholder="Optional: leave blank to search from your message" />
+            </div>
           </div>
         </div>
 
@@ -422,6 +483,8 @@
       const modelSelect = document.getElementById("model");
       const temperatureInput = document.getElementById("temperature");
       const systemInput = document.getElementById("system");
+      const useWebSearchInput = document.getElementById("use-web-search");
+      const webSearchQueryInput = document.getElementById("web-search-query");
       const messageInput = document.getElementById("message");
       const sendButton = document.getElementById("send");
       const refreshModelsButton = document.getElementById("refresh-models");
@@ -448,6 +511,8 @@
           model: defaultModel,
           systemPrompt: "You are a helpful local AI assistant.",
           temperature: 0.7,
+          useWebSearch: false,
+          webSearchQuery: "",
           messages: [],
           createdAt: now,
           updatedAt: now,
@@ -524,6 +589,8 @@
         chat.model = modelSelect.value || defaultModel;
         chat.systemPrompt = systemInput.value.trim() || "You are a helpful local AI assistant.";
         chat.temperature = Number(temperatureInput.value);
+        chat.useWebSearch = useWebSearchInput.checked;
+        chat.webSearchQuery = webSearchQueryInput.value.trim();
         chat.updatedAt = new Date().toISOString();
       }
 
@@ -531,6 +598,8 @@
         const chat = getActiveChat();
         systemInput.value = chat.systemPrompt;
         temperatureInput.value = Number.isFinite(chat.temperature) ? chat.temperature : 0.7;
+        useWebSearchInput.checked = Boolean(chat.useWebSearch);
+        webSearchQueryInput.value = chat.webSearchQuery || "";
         renderModelOptions(knownModels, chat.model);
       }
 
@@ -557,7 +626,7 @@
 
           const meta = document.createElement("div");
           meta.className = "history-meta";
-          meta.textContent = `${chat.model || defaultModel} · ${new Date(chat.updatedAt).toLocaleString()}`;
+          meta.textContent = `${chat.model || defaultModel}${chat.useWebSearch ? " · web" : ""} · ${new Date(chat.updatedAt).toLocaleString()}`;
 
           button.append(title, meta);
           historyListNode.appendChild(button);
@@ -630,6 +699,41 @@
             body.innerHTML = formatMessage(message.content);
 
             bubble.append(role, body);
+
+            if (Array.isArray(message.sources) && message.sources.length) {
+              const sources = document.createElement("div");
+              sources.className = "sources";
+
+              const title = document.createElement("p");
+              title.className = "sources-title";
+              title.textContent = "Sources";
+              sources.appendChild(title);
+
+              const list = document.createElement("div");
+              list.className = "source-list";
+
+              for (const source of message.sources) {
+                const card = document.createElement("div");
+                card.className = "source-card";
+
+                const link = document.createElement("a");
+                link.href = source.url;
+                link.target = "_blank";
+                link.rel = "noreferrer";
+                link.textContent = source.title || source.url;
+
+                const snippet = document.createElement("p");
+                snippet.className = "source-snippet";
+                snippet.textContent = source.snippet || source.excerpt || "";
+
+                card.append(link, snippet);
+                list.appendChild(card);
+              }
+
+              sources.appendChild(list);
+              bubble.appendChild(sources);
+            }
+
             wrapper.appendChild(bubble);
             conversationNode.appendChild(wrapper);
           }
@@ -716,9 +820,12 @@
             body: JSON.stringify({
               model: chat.model,
               system_prompt: chat.systemPrompt,
-              messages: priorMessages,
+              messages: priorMessages.map(({ role, content }) => ({ role, content })),
               message: draft,
               temperature: chat.temperature,
+              use_web_search: Boolean(chat.useWebSearch),
+              web_search_query: chat.webSearchQuery || "",
+              web_result_count: 4,
             }),
           });
 
@@ -728,7 +835,7 @@
           }
 
           const assistantText = data.message?.content || JSON.stringify(data, null, 2);
-          chat.messages.push({ role: "assistant", content: assistantText });
+          chat.messages.push({ role: "assistant", content: assistantText, sources: data.sources || [] });
           chat.updatedAt = new Date().toISOString();
           saveChats();
           renderHistory();
@@ -763,6 +870,17 @@
       });
 
       temperatureInput.addEventListener("change", () => {
+        updateActiveChatFromControls();
+        saveChats();
+      });
+
+      useWebSearchInput.addEventListener("change", () => {
+        updateActiveChatFromControls();
+        saveChats();
+        renderHistory();
+      });
+
+      webSearchQueryInput.addEventListener("change", () => {
         updateActiveChatFromControls();
         saveChats();
       });

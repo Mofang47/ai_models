@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import socket
+from contextlib import closing
 
 import typer
 import uvicorn
@@ -14,10 +17,36 @@ from .inspect_weights import inspect_model
 app = typer.Typer(no_args_is_help=True)
 
 
+def _create_server_socket(host: str, port: int) -> socket.socket:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    try:
+        sock.bind((host, port))
+        sock.listen(socket.SOMAXCONN)
+        sock.setblocking(False)
+    except OSError:
+        sock.close()
+        raise
+
+    return sock
+
+
 @app.command()
 def app_server(host: str = "127.0.0.1", port: int = 8000) -> None:
     """Run the local FastAPI app."""
-    uvicorn.run(fastapi_app, host=host, port=port)
+    config = uvicorn.Config(fastapi_app, host=host, port=port)
+    server = uvicorn.Server(config)
+
+    try:
+        with closing(_create_server_socket(host, port)) as sock:
+            asyncio.run(server.serve(sockets=[sock]))
+    except OSError as exc:
+        if exc.errno in {48, 98}:
+            raise typer.BadParameter(
+                f"Port {port} is already in use on {host}. Stop the old server or choose another port."
+            ) from exc
+        raise
 
 
 @app.command("inspect")

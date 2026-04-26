@@ -14,6 +14,17 @@ There are two different ways to "play with a model":
 
 This repo supports both.
 
+## Latest internet info mode
+
+The chat UI now has an optional web research mode.
+
+- Turn on `Web research` in the app
+- Ask a question that needs current information
+- The backend will search the web, fetch a few source pages, and pass that context into the local model
+- The assistant response can cite sources like `[1]`, and the UI shows the linked sources under the answer
+
+This is a lightweight live-web RAG flow: retrieval happens in the app, and generation still happens locally through Ollama.
+
 ## Recommended models for this machine
 
 This Mac has an Apple M4 with 16 GB RAM, so the comfortable range is:
