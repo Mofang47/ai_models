@@ -1,0 +1,31 @@
+[project]
+name = "local-ai-lab"
+version = "0.1.0"
+description = "A local AI playground for app-building and model inspection."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "httpx>=0.28.0",
+  "jinja2>=3.1.4",
+  "typer>=0.12.5",
+  "transformers>=4.51.0",
+  "torch>=2.6.0",
+  "safetensors>=0.4.5",
+  "huggingface-hub>=0.30.0",
+  "accelerate>=1.5.0",
+]
+
+[project.scripts]
+local-ai-lab = "local_ai_lab.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/local_ai_lab"]

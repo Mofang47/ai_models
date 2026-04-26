@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local AI Lab</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f3ecdf;
+        --panel: rgba(255, 250, 244, 0.92);
+        --panel-strong: #fffaf2;
+        --ink: #1d1a16;
+        --muted: #706253;
+        --accent: #0f766e;
+        --accent-2: #c76d1a;
+        --user: #e4f3ef;
+        --assistant: #fff4e4;
+        --border: rgba(29, 26, 22, 0.12);
+        --shadow: 0 18px 55px rgba(31, 27, 22, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(199, 109, 26, 0.16), transparent 26%),
+          radial-gradient(circle at top right, rgba(15, 118, 110, 0.16), transparent 22%),
+          linear-gradient(180deg, #eadcc7 0%, var(--bg) 40%, #f7f3ed 100%);
+      }
+
+      .layout {
+        display: grid;
+        gap: 18px;
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 24px 16px 36px;
+      }
+
+      @media (min-width: 980px) {
+        .layout {
+          grid-template-columns: 300px minmax(0, 1fr);
+          padding: 28px 20px 40px;
+        }
+      }
+
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        background: var(--panel);
+        backdrop-filter: blur(10px);
+        box-shadow: var(--shadow);
+      }
+
+      .sidebar {
+        padding: 18px;
+      }
+
+      .brand {
+        margin-bottom: 18px;
+      }
+
+      .eyebrow,
+      .status,
+      .meta,
+      .history-empty {
+        color: var(--muted);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        font-size: 0.92rem;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 4vw, 3.5rem);
+        line-height: 0.94;
+        letter-spacing: -0.04em;
+      }
+
+      .sub {
+        margin: 10px 0 0;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .history-tools,
+      .controls-grid,
+      .composer-tools {
+        display: grid;
+        gap: 12px;
+      }
+
+      .history-tools {
+        margin-bottom: 16px;
+      }
+
+      .history-list {
+        display: grid;
+        gap: 10px;
+        max-height: 52vh;
+        overflow: auto;
+      }
+
+      .history-item {
+        width: 100%;
+        text-align: left;
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+      }
+
+      .history-item.active {
+        border-color: rgba(15, 118, 110, 0.45);
+        background: rgba(228, 243, 239, 0.95);
+      }
+
+      .history-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .history-meta {
+        font-size: 0.86rem;
+        color: var(--muted);
+      }
+
+      .main {
+        padding: 18px;
+      }
+
+      .topbar {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      @media (min-width: 720px) {
+        .topbar {
+          flex-direction: row;
+          justify-content: space-between;
+          align-items: start;
+        }
+      }
+
+      .controls-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      input,
+      textarea,
+      select,
+      button {
+        width: 100%;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        padding: 12px 14px;
+        font: inherit;
+      }
+
+      input,
+      textarea,
+      select {
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--ink);
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      button {
+        cursor: pointer;
+        border: 0;
+        color: white;
+        font-weight: 600;
+        background: linear-gradient(135deg, var(--accent), #155e75);
+      }
+
+      button.secondary {
+        color: var(--ink);
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      button:hover {
+        filter: brightness(1.04);
+      }
+
+      button:disabled {
+        cursor: progress;
+        opacity: 0.75;
+      }
+
+      .chat-shell {
+        display: grid;
+        gap: 14px;
+      }
+
+      .conversation {
+        min-height: 420px;
+        max-height: 58vh;
+        overflow: auto;
+        padding: 18px;
+        border-radius: 22px;
+        border: 1px solid var(--border);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 250, 243, 0.95)),
+          repeating-linear-gradient(
+            180deg,
+            rgba(112, 98, 83, 0.03),
+            rgba(112, 98, 83, 0.03) 28px,
+            rgba(255, 255, 255, 0.02) 28px,
+            rgba(255, 255, 255, 0.02) 56px
+          );
+      }
+
+      .empty-state {
+        display: grid;
+        place-items: center;
+        min-height: 320px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .message {
+        display: flex;
+        margin-bottom: 14px;
+      }
+
+      .message.user {
+        justify-content: flex-end;
+      }
+
+      .bubble {
+        max-width: min(760px, 92%);
+        padding: 14px 16px;
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 30px rgba(31, 27, 22, 0.05);
+      }
+
+      .message.user .bubble {
+        background: var(--user);
+        border-bottom-right-radius: 8px;
+      }
+
+      .message.assistant .bubble {
+        background: var(--assistant);
+        border-bottom-left-radius: 8px;
+      }
+
+      .message.system .bubble {
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .role {
+        margin-bottom: 8px;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .message-body {
+        line-height: 1.58;
+      }
+
+      .message-body p {
+        margin: 0 0 0.9em;
+      }
+
+      .message-body p:last-child {
+        margin-bottom: 0;
+      }
+
+      .message-body pre {
+        margin: 0.9em 0;
+        padding: 14px;
+        overflow: auto;
+        border-radius: 14px;
+        background: rgba(29, 26, 22, 0.92);
+        color: #f7efe2;
+      }
+
+      .message-body code {
+        font-family: "SFMono-Regular", "SF Mono", Consolas, monospace;
+      }
+
+      .message-body :not(pre) > code {
+        padding: 0.1em 0.35em;
+        border-radius: 8px;
+        background: rgba(29, 26, 22, 0.08);
+      }
+
+      .composer {
+        padding: 16px;
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        background: var(--panel-strong);
+      }
+
+      .composer-tools {
+        grid-template-columns: 1fr;
+      }
+
+      @media (min-width: 840px) {
+        .composer-tools {
+          grid-template-columns: 1fr auto auto;
+          align-items: end;
+        }
+      }
+
+      .status-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        font-size: 0.94rem;
+      }
+
+      .status {
+        margin: 0;
+      }
+
+      .meta {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="layout">
+      <aside class="card sidebar">
+        <div class="brand">
+          <p class="eyebrow">Local app mode via Ollama</p>
+          <h1>Local AI Lab</h1>
+          <p class="sub">
+            Switch models, keep the conversation going, and save local chat history in your browser.
+          </p>
+        </div>
+
+        <div class="history-tools">
+          <button id="new-chat" class="secondary" type="button">New chat</button>
+          <button id="delete-chat" class="secondary" type="button">Delete current chat</button>
+        </div>
+
+        <div class="history-list" id="history-list"></div>
+        <p class="history-empty" id="history-empty" hidden>No saved chats yet.</p>
+      </aside>
+
+      <section class="card main">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Conversation</p>
+            <p class="sub" style="margin-top: 4px;">Responses are formatted as chat bubbles with preserved paragraphs and code blocks.</p>
+          </div>
+          <div class="controls-grid" style="min-width: min(100%, 620px);">
+            <div>
+              <label for="model">Model</label>
+              <select id="model"></select>
+            </div>
+            <div>
+              <label for="temperature">Temperature</label>
+              <input id="temperature" type="number" step="0.1" min="0" max="2" value="0.7" />
+            </div>
+            <div>
+              <label for="system">System prompt</label>
+              <input id="system" value="You are a helpful local AI assistant." />
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-shell">
+          <div class="conversation" id="conversation">
+            <div class="empty-state" id="empty-state">
+              <div>
+                <strong>No messages yet.</strong>
+                <p>Ask a question to start a saved multi-turn conversation.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="composer">
+            <div class="status-row">
+              <p class="status" id="status">Ready.</p>
+              <p class="meta" id="meta">0 messages</p>
+            </div>
+
+            <div class="composer-tools">
+              <div>
+                <label for="message">Your message</label>
+                <textarea id="message" placeholder="Ask about local models, prompt engineering, or anything else."></textarea>
+              </div>
+              <button id="refresh-models" class="secondary" type="button">Refresh models</button>
+              <button id="send" type="button">Send</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const STORAGE_KEY = "local-ai-lab-chats-v1";
+      const modelSelect = document.getElementById("model");
+      const temperatureInput = document.getElementById("temperature");
+      const systemInput = document.getElementById("system");
+      const messageInput = document.getElementById("message");
+      const sendButton = document.getElementById("send");
+      const refreshModelsButton = document.getElementById("refresh-models");
+      const newChatButton = document.getElementById("new-chat");
+      const deleteChatButton = document.getElementById("delete-chat");
+      const conversationNode = document.getElementById("conversation");
+      const emptyStateNode = document.getElementById("empty-state");
+      const statusNode = document.getElementById("status");
+      const metaNode = document.getElementById("meta");
+      const historyListNode = document.getElementById("history-list");
+      const historyEmptyNode = document.getElementById("history-empty");
+
+      const defaultModel = {{ default_model|tojson }};
+
+      let chats = loadChats();
+      let activeChatId = chats[0]?.id || null;
+      let knownModels = [];
+
+      function createChat() {
+        const now = new Date().toISOString();
+        return {
+          id: String(Date.now() + Math.random()),
+          title: "New chat",
+          model: defaultModel,
+          systemPrompt: "You are a helpful local AI assistant.",
+          temperature: 0.7,
+          messages: [],
+          createdAt: now,
+          updatedAt: now,
+        };
+      }
+
+      function loadChats() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) {
+            return [createChat()];
+          }
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) && parsed.length ? parsed : [createChat()];
+        } catch (error) {
+          console.error(error);
+          return [createChat()];
+        }
+      }
+
+      function saveChats() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+      }
+
+      function getActiveChat() {
+        let chat = chats.find((item) => item.id === activeChatId);
+        if (!chat) {
+          if (!chats.length) {
+            chat = createChat();
+            chats = [chat];
+          } else {
+            chat = chats[0];
+          }
+          activeChatId = chat.id;
+        }
+        return chat;
+      }
+
+      function setActiveChat(id) {
+        activeChatId = id;
+        syncControlsFromChat();
+        renderHistory();
+        renderConversation();
+      }
+
+      function addNewChat() {
+        const chat = createChat();
+        chats.unshift(chat);
+        activeChatId = chat.id;
+        saveChats();
+        syncControlsFromChat();
+        renderHistory();
+        renderConversation();
+        messageInput.focus();
+      }
+
+      function deleteCurrentChat() {
+        if (!chats.length) {
+          return;
+        }
+        chats = chats.filter((chat) => chat.id !== activeChatId);
+        if (!chats.length) {
+          chats = [createChat()];
+        }
+        activeChatId = chats[0].id;
+        saveChats();
+        syncControlsFromChat();
+        renderHistory();
+        renderConversation();
+      }
+
+      function updateActiveChatFromControls() {
+        const chat = getActiveChat();
+        chat.model = modelSelect.value || defaultModel;
+        chat.systemPrompt = systemInput.value.trim() || "You are a helpful local AI assistant.";
+        chat.temperature = Number(temperatureInput.value);
+        chat.updatedAt = new Date().toISOString();
+      }
+
+      function syncControlsFromChat() {
+        const chat = getActiveChat();
+        systemInput.value = chat.systemPrompt;
+        temperatureInput.value = Number.isFinite(chat.temperature) ? chat.temperature : 0.7;
+        renderModelOptions(knownModels, chat.model);
+      }
+
+      function renderHistory() {
+        historyListNode.innerHTML = "";
+        const sorted = [...chats].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+
+        if (!sorted.length) {
+          historyEmptyNode.hidden = false;
+          return;
+        }
+
+        historyEmptyNode.hidden = true;
+
+        for (const chat of sorted) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `history-item${chat.id === activeChatId ? " active" : ""}`;
+          button.addEventListener("click", () => setActiveChat(chat.id));
+
+          const title = document.createElement("div");
+          title.className = "history-title";
+          title.textContent = chat.title || "Untitled chat";
+
+          const meta = document.createElement("div");
+          meta.className = "history-meta";
+          meta.textContent = `${chat.model || defaultModel} · ${new Date(chat.updatedAt).toLocaleString()}`;
+
+          button.append(title, meta);
+          historyListNode.appendChild(button);
+        }
+      }
+
+      function escapeHtml(value) {
+        return value
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function formatInlineMarkdown(text) {
+        let formatted = escapeHtml(text);
+        formatted = formatted.replace(/`([^`]+)`/g, "<code>$1</code>");
+        formatted = formatted.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+        formatted = formatted.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+        formatted = formatted.replace(/_([^_]+)_/g, "<em>$1</em>");
+        return formatted.replaceAll("\n", "<br />");
+      }
+
+      function formatMessage(content) {
+        const source = String(content || "");
+        const chunks = source.split(/```/);
+        return chunks
+          .map((chunk, index) => {
+            if (index % 2 === 1) {
+              const lines = chunk.replace(/^\n+|\n+$/g, "").split("\n");
+              const firstLine = lines[0] || "";
+              const looksLikeLanguageTag = /^[a-zA-Z0-9_+-]+$/.test(firstLine.trim());
+              const code = looksLikeLanguageTag ? lines.slice(1).join("\n") : lines.join("\n");
+              return `<pre><code>${escapeHtml(code)}</code></pre>`;
+            }
+
+            return chunk
+              .trim()
+              .split(/\n{2,}/)
+              .filter(Boolean)
+              .map((paragraph) => `<p>${formatInlineMarkdown(paragraph)}</p>`)
+              .join("");
+          })
+          .join("");
+      }
+
+      function renderConversation() {
+        const chat = getActiveChat();
+        conversationNode.innerHTML = "";
+
+        if (!chat.messages.length) {
+          emptyStateNode.hidden = false;
+          conversationNode.appendChild(emptyStateNode);
+        } else {
+          emptyStateNode.hidden = true;
+          for (const message of chat.messages) {
+            const wrapper = document.createElement("div");
+            wrapper.className = `message ${message.role}`;
+
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+
+            const role = document.createElement("div");
+            role.className = "role";
+            role.textContent = message.role;
+
+            const body = document.createElement("div");
+            body.className = "message-body";
+            body.innerHTML = formatMessage(message.content);
+
+            bubble.append(role, body);
+            wrapper.appendChild(bubble);
+            conversationNode.appendChild(wrapper);
+          }
+        }
+
+        metaNode.textContent = `${chat.messages.length} messages`;
+        conversationNode.scrollTop = conversationNode.scrollHeight;
+      }
+
+      function renderModelOptions(models, preferredModel) {
+        const options = models.length ? models : [{ name: defaultModel }];
+        modelSelect.innerHTML = "";
+
+        for (const entry of options) {
+          const option = document.createElement("option");
+          option.value = entry.name;
+          option.textContent = entry.name;
+          modelSelect.appendChild(option);
+        }
+
+        const targetModel = preferredModel || defaultModel;
+        if (![...modelSelect.options].some((option) => option.value === targetModel)) {
+          const fallback = document.createElement("option");
+          fallback.value = targetModel;
+          fallback.textContent = `${targetModel} (custom)`;
+          modelSelect.appendChild(fallback);
+        }
+        modelSelect.value = targetModel;
+      }
+
+      function updateChatTitle(chat) {
+        const firstUserMessage = chat.messages.find((message) => message.role === "user");
+        if (!firstUserMessage) {
+          chat.title = "New chat";
+          return;
+        }
+
+        chat.title = firstUserMessage.content.trim().slice(0, 48) || "New chat";
+      }
+
+      async function refreshModels() {
+        statusNode.textContent = "Loading models...";
+        try {
+          const response = await fetch("/api/models");
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.detail || "Could not load models");
+          }
+
+          knownModels = data.models || [];
+          renderModelOptions(knownModels, getActiveChat().model);
+          statusNode.textContent = `Loaded ${knownModels.length} model${knownModels.length === 1 ? "" : "s"}.`;
+        } catch (error) {
+          statusNode.textContent = "Model list unavailable.";
+          console.error(error);
+        }
+      }
+
+      async function sendMessage() {
+        const draft = messageInput.value.trim();
+        if (!draft) {
+          statusNode.textContent = "Write a message first.";
+          return;
+        }
+
+        updateActiveChatFromControls();
+        const chat = getActiveChat();
+        const priorMessages = [...chat.messages];
+        chat.messages.push({ role: "user", content: draft });
+        updateChatTitle(chat);
+        chat.updatedAt = new Date().toISOString();
+        saveChats();
+        renderHistory();
+        renderConversation();
+
+        messageInput.value = "";
+        sendButton.disabled = true;
+        statusNode.textContent = "Thinking...";
+
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: chat.model,
+              system_prompt: chat.systemPrompt,
+              messages: priorMessages,
+              message: draft,
+              temperature: chat.temperature,
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.detail || "Request failed");
+          }
+
+          const assistantText = data.message?.content || JSON.stringify(data, null, 2);
+          chat.messages.push({ role: "assistant", content: assistantText });
+          chat.updatedAt = new Date().toISOString();
+          saveChats();
+          renderHistory();
+          renderConversation();
+          statusNode.textContent = "Done.";
+        } catch (error) {
+          chat.messages.push({ role: "assistant", content: `Request failed: ${error.message}` });
+          chat.updatedAt = new Date().toISOString();
+          saveChats();
+          renderHistory();
+          renderConversation();
+          statusNode.textContent = "Request failed.";
+        } finally {
+          sendButton.disabled = false;
+        }
+      }
+
+      newChatButton.addEventListener("click", addNewChat);
+      deleteChatButton.addEventListener("click", deleteCurrentChat);
+      refreshModelsButton.addEventListener("click", refreshModels);
+      sendButton.addEventListener("click", sendMessage);
+
+      modelSelect.addEventListener("change", () => {
+        updateActiveChatFromControls();
+        saveChats();
+        renderHistory();
+      });
+
+      systemInput.addEventListener("change", () => {
+        updateActiveChatFromControls();
+        saveChats();
+      });
+
+      temperatureInput.addEventListener("change", () => {
+        updateActiveChatFromControls();
+        saveChats();
+      });
+
+      messageInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          sendMessage();
+        }
+      });
+
+      syncControlsFromChat();
+      renderHistory();
+      renderConversation();
+      refreshModels();
+    </script>
+  </body>
+</html>
