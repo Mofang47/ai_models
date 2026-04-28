@@ -537,6 +537,34 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
       }
 
+      async function saveChatToServer(chat) {
+        const response = await fetch(`/api/chats/${encodeURIComponent(chat.id)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(chat),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || "Could not save chat");
+        }
+      }
+
+      async function saveAllChatsToServer() {
+        for (const chat of chats) {
+          await saveChatToServer(chat);
+        }
+      }
+
+      async function loadChatsFromServer() {
+        const response = await fetch("/api/chats");
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Could not load chats");
+        }
+        return Array.isArray(data.chats) ? data.chats : [];
+      }
+
       function getActiveChat() {
         let chat = chats.find((item) => item.id === activeChatId);
         if (!chat) {
@@ -558,27 +586,37 @@
         renderConversation();
       }
 
-      function addNewChat() {
+      async function addNewChat() {
         const chat = createChat();
         chats.unshift(chat);
         activeChatId = chat.id;
         saveChats();
+        await saveChatToServer(chat);
         syncControlsFromChat();
         renderHistory();
         renderConversation();
         messageInput.focus();
       }
 
-      function deleteCurrentChat() {
+      async function deleteCurrentChat() {
         if (!chats.length) {
           return;
         }
+        const deletedChatId = activeChatId;
         chats = chats.filter((chat) => chat.id !== activeChatId);
         if (!chats.length) {
           chats = [createChat()];
         }
         activeChatId = chats[0].id;
         saveChats();
+        try {
+          await fetch(`/api/chats/${encodeURIComponent(deletedChatId)}`, { method: "DELETE" });
+        } catch (error) {
+          console.error(error);
+        }
+        if (chats.length === 1 && chats[0].messages.length === 0) {
+          await saveChatToServer(chats[0]);
+        }
         syncControlsFromChat();
         renderHistory();
         renderConversation();
@@ -764,6 +802,17 @@
         modelSelect.value = targetModel;
       }
 
+      async function persistActiveChat() {
+        const chat = getActiveChat();
+        saveChats();
+        try {
+          await saveChatToServer(chat);
+        } catch (error) {
+          console.error(error);
+          statusNode.textContent = "Saved locally, but server save failed.";
+        }
+      }
+
       function updateChatTitle(chat) {
         const firstUserMessage = chat.messages.find((message) => message.role === "user");
         if (!firstUserMessage) {
@@ -805,7 +854,7 @@
         chat.messages.push({ role: "user", content: draft });
         updateChatTitle(chat);
         chat.updatedAt = new Date().toISOString();
-        saveChats();
+        await persistActiveChat();
         renderHistory();
         renderConversation();
 
@@ -837,14 +886,14 @@
           const assistantText = data.message?.content || JSON.stringify(data, null, 2);
           chat.messages.push({ role: "assistant", content: assistantText, sources: data.sources || [] });
           chat.updatedAt = new Date().toISOString();
-          saveChats();
+          await persistActiveChat();
           renderHistory();
           renderConversation();
           statusNode.textContent = "Done.";
         } catch (error) {
           chat.messages.push({ role: "assistant", content: `Request failed: ${error.message}` });
           chat.updatedAt = new Date().toISOString();
-          saveChats();
+          await persistActiveChat();
           renderHistory();
           renderConversation();
           statusNode.textContent = "Request failed.";
@@ -860,29 +909,29 @@
 
       modelSelect.addEventListener("change", () => {
         updateActiveChatFromControls();
-        saveChats();
+        persistActiveChat();
         renderHistory();
       });
 
       systemInput.addEventListener("change", () => {
         updateActiveChatFromControls();
-        saveChats();
+        persistActiveChat();
       });
 
       temperatureInput.addEventListener("change", () => {
         updateActiveChatFromControls();
-        saveChats();
+        persistActiveChat();
       });
 
       useWebSearchInput.addEventListener("change", () => {
         updateActiveChatFromControls();
-        saveChats();
+        persistActiveChat();
         renderHistory();
       });
 
       webSearchQueryInput.addEventListener("change", () => {
         updateActiveChatFromControls();
-        saveChats();
+        persistActiveChat();
       });
 
       messageInput.addEventListener("keydown", (event) => {
@@ -892,10 +941,28 @@
         }
       });
 
-      syncControlsFromChat();
-      renderHistory();
-      renderConversation();
-      refreshModels();
+      async function bootstrap() {
+        try {
+          const serverChats = await loadChatsFromServer();
+          if (serverChats.length) {
+            chats = serverChats;
+          } else {
+            await saveAllChatsToServer();
+          }
+          activeChatId = chats[0]?.id || createChat().id;
+          saveChats();
+        } catch (error) {
+          console.error(error);
+          statusNode.textContent = "Using local history only.";
+        }
+
+        syncControlsFromChat();
+        renderHistory();
+        renderConversation();
+        refreshModels();
+      }
+
+      bootstrap();
     </script>
   </body>
 </html>

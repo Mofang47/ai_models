@@ -25,6 +25,14 @@ The chat UI now has an optional web research mode.
 
 This is a lightweight live-web RAG flow: retrieval happens in the app, and generation still happens locally through Ollama.
 
+## Chat history persistence
+
+Chat history is now persisted on the backend in `data/chats.json`.
+
+- browser refreshes keep the conversation
+- chats survive browser storage clears as long as the project data file remains
+- the UI still keeps a local browser cache as a fallback if the backend store is unavailable
+
 ## Recommended models for this machine
 
 This Mac has an Apple M4 with 16 GB RAM, so the comfortable range is:
