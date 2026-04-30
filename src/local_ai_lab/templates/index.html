@@ -410,6 +410,9 @@
         <div class="history-tools">
           <button id="new-chat" class="secondary" type="button">New chat</button>
           <button id="delete-chat" class="secondary" type="button">Delete current chat</button>
+          <a href="/explore" style="text-decoration: none;">
+            <button class="secondary" type="button">Open LLM Explorer</button>
+          </a>
         </div>
 
         <div class="history-list" id="history-list"></div>
@@ -445,6 +448,17 @@
             <div>
               <label for="web-search-query">Search query override</label>
               <input id="web-search-query" placeholder="Optional: leave blank to search from your message" />
+            </div>
+            <div>
+              <label for="use-pdf-search">PDF library</label>
+              <div class="checkbox-row">
+                <input id="use-pdf-search" type="checkbox" style="width: auto;" />
+                <span>Use local book folder for this chat</span>
+              </div>
+            </div>
+            <div>
+              <label for="rebuild-pdf-library">Book index</label>
+              <button id="rebuild-pdf-library" class="secondary" type="button">Rebuild PDF index</button>
             </div>
           </div>
         </div>
@@ -485,6 +499,8 @@
       const systemInput = document.getElementById("system");
       const useWebSearchInput = document.getElementById("use-web-search");
       const webSearchQueryInput = document.getElementById("web-search-query");
+      const usePdfSearchInput = document.getElementById("use-pdf-search");
+      const rebuildPdfLibraryButton = document.getElementById("rebuild-pdf-library");
       const messageInput = document.getElementById("message");
       const sendButton = document.getElementById("send");
       const refreshModelsButton = document.getElementById("refresh-models");
@@ -513,6 +529,7 @@
           temperature: 0.7,
           useWebSearch: false,
           webSearchQuery: "",
+          usePdfSearch: false,
           messages: [],
           createdAt: now,
           updatedAt: now,
@@ -629,6 +646,7 @@
         chat.temperature = Number(temperatureInput.value);
         chat.useWebSearch = useWebSearchInput.checked;
         chat.webSearchQuery = webSearchQueryInput.value.trim();
+        chat.usePdfSearch = usePdfSearchInput.checked;
         chat.updatedAt = new Date().toISOString();
       }
 
@@ -638,6 +656,7 @@
         temperatureInput.value = Number.isFinite(chat.temperature) ? chat.temperature : 0.7;
         useWebSearchInput.checked = Boolean(chat.useWebSearch);
         webSearchQueryInput.value = chat.webSearchQuery || "";
+        usePdfSearchInput.checked = Boolean(chat.usePdfSearch);
         renderModelOptions(knownModels, chat.model);
       }
 
@@ -664,7 +683,8 @@
 
           const meta = document.createElement("div");
           meta.className = "history-meta";
-          meta.textContent = `${chat.model || defaultModel}${chat.useWebSearch ? " · web" : ""} · ${new Date(chat.updatedAt).toLocaleString()}`;
+          const modes = [chat.useWebSearch ? "web" : "", chat.usePdfSearch ? "pdf" : ""].filter(Boolean);
+          meta.textContent = `${chat.model || defaultModel}${modes.length ? ` · ${modes.join("+")}` : ""} · ${new Date(chat.updatedAt).toLocaleString()}`;
 
           button.append(title, meta);
           historyListNode.appendChild(button);
@@ -755,7 +775,7 @@
                 card.className = "source-card";
 
                 const link = document.createElement("a");
-                link.href = source.url;
+                link.href = source.url || "#";
                 link.target = "_blank";
                 link.rel = "noreferrer";
                 link.textContent = source.title || source.url;
@@ -841,6 +861,41 @@
         }
       }
 
+      async function refreshPdfLibraryStatus() {
+        try {
+          const response = await fetch("/api/pdf-library");
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.detail || "Could not load PDF library status");
+          }
+          const state = data.needs_rebuild ? "needs index" : `${data.chunk_count} chunks`;
+          rebuildPdfLibraryButton.textContent = `Rebuild PDF index (${state})`;
+        } catch (error) {
+          console.error(error);
+          rebuildPdfLibraryButton.textContent = "PDF index unavailable";
+        }
+      }
+
+      async function rebuildPdfLibrary() {
+        rebuildPdfLibraryButton.disabled = true;
+        statusNode.textContent = "Building PDF index...";
+        try {
+          const response = await fetch("/api/pdf-library/rebuild", { method: "POST" });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.detail || "Could not rebuild PDF index");
+          }
+          rebuildPdfLibraryButton.textContent = `Rebuild PDF index (${data.chunk_count} chunks)`;
+          statusNode.textContent = `Indexed ${data.file_count} files from the PDF library.`;
+        } catch (error) {
+          console.error(error);
+          statusNode.textContent = `PDF indexing failed: ${error.message}`;
+          await refreshPdfLibraryStatus();
+        } finally {
+          rebuildPdfLibraryButton.disabled = false;
+        }
+      }
+
       async function sendMessage() {
         const draft = messageInput.value.trim();
         if (!draft) {
@@ -875,6 +930,8 @@
               use_web_search: Boolean(chat.useWebSearch),
               web_search_query: chat.webSearchQuery || "",
               web_result_count: 4,
+              use_pdf_search: Boolean(chat.usePdfSearch),
+              pdf_result_count: 6,
             }),
           });
 
@@ -905,6 +962,7 @@
       newChatButton.addEventListener("click", addNewChat);
       deleteChatButton.addEventListener("click", deleteCurrentChat);
       refreshModelsButton.addEventListener("click", refreshModels);
+      rebuildPdfLibraryButton.addEventListener("click", rebuildPdfLibrary);
       sendButton.addEventListener("click", sendMessage);
 
       modelSelect.addEventListener("change", () => {
@@ -934,6 +992,12 @@
         persistActiveChat();
       });
 
+      usePdfSearchInput.addEventListener("change", () => {
+        updateActiveChatFromControls();
+        persistActiveChat();
+        renderHistory();
+      });
+
       messageInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
@@ -960,6 +1024,7 @@
         renderHistory();
         renderConversation();
         refreshModels();
+        refreshPdfLibraryStatus();
       }
 
       bootstrap();

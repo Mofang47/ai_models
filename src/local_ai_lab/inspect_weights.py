@@ -33,9 +33,12 @@ def inspect_model(model_name: str, limit: int = 12) -> dict[str, Any]:
     return {
         "model": model_name,
         "architectures": getattr(config, "architectures", []),
+        "model_type": getattr(config, "model_type", None),
         "hidden_size": getattr(config, "hidden_size", None),
         "num_hidden_layers": getattr(config, "num_hidden_layers", None),
         "num_attention_heads": getattr(config, "num_attention_heads", None),
+        "intermediate_size": getattr(config, "intermediate_size", None),
+        "max_position_embeddings": getattr(config, "max_position_embeddings", None),
         "vocab_size": getattr(config, "vocab_size", None),
         "tokenizer_class": tokenizer.__class__.__name__,
         "special_tokens": tokenizer.special_tokens_map,

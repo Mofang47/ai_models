@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LLM Explorer</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f2efe8;
+        --ink: #171512;
+        --muted: #6a6258;
+        --panel: rgba(255, 251, 245, 0.92);
+        --panel-strong: #fffdf8;
+        --border: rgba(23, 21, 18, 0.12);
+        --accent: #9a3412;
+        --accent-2: #0f766e;
+        --shadow: 0 18px 55px rgba(30, 23, 14, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(154, 52, 18, 0.16), transparent 25%),
+          radial-gradient(circle at top right, rgba(15, 118, 110, 0.14), transparent 22%),
+          linear-gradient(180deg, #ece2d2 0%, var(--bg) 42%, #f8f5ef 100%);
+      }
+
+      .layout {
+        display: grid;
+        gap: 18px;
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+      }
+
+      @media (min-width: 1100px) {
+        .layout {
+          grid-template-columns: 320px minmax(0, 1fr);
+          padding: 30px 22px 48px;
+        }
+      }
+
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        background: var(--panel);
+        backdrop-filter: blur(10px);
+        box-shadow: var(--shadow);
+      }
+
+      .sidebar,
+      .main {
+        padding: 20px;
+      }
+
+      .eyebrow,
+      .muted,
+      .status {
+        color: var(--muted);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        font-size: 0.9rem;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 4vw, 3.4rem);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      .sub {
+        margin: 12px 0 0;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .model-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+        max-height: 70vh;
+        overflow: auto;
+      }
+
+      .model-item {
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+      }
+
+      .model-item.active {
+        border-color: rgba(154, 52, 18, 0.35);
+        background: rgba(255, 244, 236, 0.95);
+      }
+
+      .model-name {
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .model-meta {
+        font-size: 0.87rem;
+        color: var(--muted);
+      }
+
+      .main-header {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      @media (min-width: 900px) {
+        .main-header {
+          flex-direction: row;
+          justify-content: space-between;
+          align-items: start;
+        }
+      }
+
+      .summary-grid,
+      .playground-grid,
+      .inspector-grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      }
+
+      .metric {
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.56);
+        border: 1px solid rgba(23, 21, 18, 0.08);
+      }
+
+      .metric-label {
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+
+      .metric-value {
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.3;
+      }
+
+      .section {
+        padding: 18px;
+        border-radius: 22px;
+        border: 1px solid var(--border);
+        background: var(--panel-strong);
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      input,
+      textarea,
+      select,
+      button {
+        width: 100%;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        padding: 12px 14px;
+        font: inherit;
+      }
+
+      input,
+      textarea,
+      select {
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--ink);
+      }
+
+      textarea {
+        min-height: 140px;
+        resize: vertical;
+      }
+
+      button {
+        border: 0;
+        cursor: pointer;
+        color: white;
+        font-weight: 600;
+        background: linear-gradient(135deg, var(--accent), #b45309);
+      }
+
+      button.secondary {
+        color: var(--ink);
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.76);
+      }
+
+      .playground-grid {
+        grid-template-columns: 1fr;
+      }
+
+      @media (min-width: 1050px) {
+        .playground-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .toolbar {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        margin-bottom: 12px;
+      }
+
+      .output {
+        min-height: 260px;
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(250, 247, 241, 0.95);
+        white-space: pre-wrap;
+        line-height: 1.55;
+      }
+
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .tab {
+        width: auto;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.68);
+        color: var(--ink);
+      }
+
+      .tab.active {
+        background: linear-gradient(135deg, var(--accent-2), #0f766e);
+        color: white;
+      }
+
+      pre {
+        margin: 0;
+        padding: 16px;
+        overflow: auto;
+        border-radius: 18px;
+        background: #171512;
+        color: #f9f2e7;
+        font-family: "SFMono-Regular", "SF Mono", Consolas, monospace;
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .empty {
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px dashed var(--border);
+        color: var(--muted);
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="layout">
+      <aside class="card sidebar">
+        <p class="eyebrow">Model Dashboard</p>
+        <h1>LLM Explorer</h1>
+        <p class="sub">
+          Browse your local models, inspect their metadata, and run quick prompt experiments from one place.
+        </p>
+
+        <div class="stack" style="margin-top: 18px;">
+          <button id="refresh-models" class="secondary" type="button">Refresh model list</button>
+          <a href="/" style="text-decoration: none;">
+            <button class="secondary" type="button">Back to chat app</button>
+          </a>
+        </div>
+
+        <div class="model-list" id="model-list"></div>
+      </aside>
+
+      <section class="card main">
+        <div class="main-header">
+          <div>
+            <p class="eyebrow">Selected model</p>
+            <h2 id="selected-title">Loading...</h2>
+            <p class="sub" id="selected-sub">Pull model metadata, inspect architecture, and try prompts here.</p>
+          </div>
+          <div>
+            <p class="status" id="status">Loading models...</p>
+          </div>
+        </div>
+
+        <div class="summary-grid" id="summary-grid"></div>
+
+        <div class="playground-grid" style="margin-top: 18px;">
+          <section class="section">
+            <h3 style="margin-bottom: 14px;">Playground</h3>
+            <div class="toolbar">
+              <div>
+                <label for="playground-source">Source</label>
+                <select id="playground-source">
+                  <option value="ollama">Ollama</option>
+                  <option value="huggingface">Transformers</option>
+                </select>
+              </div>
+              <div>
+                <label for="playground-temperature">Temperature</label>
+                <input id="playground-temperature" type="number" min="0" max="2" step="0.1" value="0.7" />
+              </div>
+              <div>
+                <label for="playground-max-tokens">Max new tokens</label>
+                <input id="playground-max-tokens" type="number" min="1" max="512" step="1" value="160" />
+              </div>
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label for="playground-system">System prompt</label>
+              <input id="playground-system" value="You are a helpful local AI assistant." />
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label for="playground-prompt">Prompt</label>
+              <textarea id="playground-prompt">Explain what makes this model a good fit for local experimentation.</textarea>
+            </div>
+            <button id="run-playground" type="button">Run prompt</button>
+          </section>
+
+          <section class="section">
+            <h3 style="margin-bottom: 14px;">Output</h3>
+            <div class="output" id="playground-output">Run a prompt to see output here.</div>
+          </section>
+        </div>
+
+        <section class="section" style="margin-top: 18px;">
+          <h3 style="margin-bottom: 14px;">Inspector</h3>
+          <div class="tabs">
+            <button class="tab active" data-tab="overview" type="button">Overview</button>
+            <button class="tab" data-tab="tokenizer" type="button">Tokenizer</button>
+            <button class="tab" data-tab="weights" type="button">Weights</button>
+            <button class="tab" data-tab="raw" type="button">Raw</button>
+          </div>
+          <div id="tab-panel"></div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const defaultModel = {{ default_model|tojson }};
+      const defaultHfModel = {{ default_hf_model|tojson }};
+      const modelListNode = document.getElementById("model-list");
+      const summaryGridNode = document.getElementById("summary-grid");
+      const statusNode = document.getElementById("status");
+      const selectedTitleNode = document.getElementById("selected-title");
+      const selectedSubNode = document.getElementById("selected-sub");
+      const tabPanelNode = document.getElementById("tab-panel");
+      const outputNode = document.getElementById("playground-output");
+      const sourceSelect = document.getElementById("playground-source");
+      const temperatureInput = document.getElementById("playground-temperature");
+      const maxTokensInput = document.getElementById("playground-max-tokens");
+      const systemInput = document.getElementById("playground-system");
+      const promptInput = document.getElementById("playground-prompt");
+
+      let models = [];
+      let selected = null;
+      let detail = null;
+      let activeTab = "overview";
+
+      function renderModels() {
+        modelListNode.innerHTML = "";
+        for (const item of models) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `model-item${selected && selected.id === item.id && selected.source === item.source ? " active" : ""}`;
+          button.addEventListener("click", () => selectModel(item));
+
+          const name = document.createElement("div");
+          name.className = "model-name";
+          name.textContent = item.title;
+
+          const meta = document.createElement("div");
+          meta.className = "model-meta";
+          meta.textContent = [item.source, item.family, item.parameter_size || item.size_label].filter(Boolean).join(" · ");
+
+          button.append(name, meta);
+          modelListNode.appendChild(button);
+        }
+      }
+
+      function renderSummary() {
+        summaryGridNode.innerHTML = "";
+        if (!detail) {
+          summaryGridNode.innerHTML = '<div class="empty">Select a model to see summary metrics.</div>';
+          return;
+        }
+
+        const entries = [
+          ["Source", detail.summary.source],
+          ["Family", detail.summary.family || "Unknown"],
+          ["Size", detail.summary.size_label || detail.summary.parameter_size || "Unknown"],
+          ["Quantization", detail.summary.quantization || "n/a"],
+          ["Context", detail.summary.context_window || "Unknown"],
+          ["Model ID", detail.summary.id],
+        ];
+
+        for (const [label, value] of entries) {
+          const card = document.createElement("div");
+          card.className = "metric";
+          card.innerHTML = `
+            <div class="metric-label">${label}</div>
+            <div class="metric-value">${value}</div>
+          `;
+          summaryGridNode.appendChild(card);
+        }
+      }
+
+      function renderTab() {
+        document.querySelectorAll(".tab").forEach((button) => {
+          button.classList.toggle("active", button.dataset.tab === activeTab);
+        });
+
+        if (!detail) {
+          tabPanelNode.innerHTML = '<div class="empty">Model detail will appear here once loaded.</div>';
+          return;
+        }
+
+        if (activeTab === "overview") {
+          const raw = detail.raw || {};
+          tabPanelNode.innerHTML = `
+            <pre>${escapeHtml(JSON.stringify({
+              architectures: raw.architectures,
+              model_type: raw.model_type,
+              hidden_size: raw.hidden_size,
+              num_hidden_layers: raw.num_hidden_layers,
+              num_attention_heads: raw.num_attention_heads,
+              intermediate_size: raw.intermediate_size,
+              vocab_size: raw.vocab_size,
+              max_position_embeddings: raw.max_position_embeddings,
+            }, null, 2))}</pre>
+          `;
+          return;
+        }
+
+        if (activeTab === "tokenizer") {
+          const raw = detail.raw || {};
+          tabPanelNode.innerHTML = `<pre>${escapeHtml(JSON.stringify({
+            tokenizer_class: raw.tokenizer_class,
+            special_tokens: raw.special_tokens,
+          }, null, 2))}</pre>`;
+          return;
+        }
+
+        if (activeTab === "weights") {
+          const raw = detail.raw || {};
+          tabPanelNode.innerHTML = `<pre>${escapeHtml(JSON.stringify(raw.tensor_samples || raw.model_info || raw.details || {}, null, 2))}</pre>`;
+          return;
+        }
+
+        tabPanelNode.innerHTML = `<pre>${escapeHtml(JSON.stringify(detail.raw, null, 2))}</pre>`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      async function loadModels() {
+        statusNode.textContent = "Loading models...";
+        const response = await fetch("/api/explorer/models");
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Could not load explorer models");
+        }
+
+        models = Array.isArray(data.models) ? data.models : [];
+        renderModels();
+
+        if (!selected && models.length) {
+          const preferred = models.find((item) => item.id === defaultModel && item.source === "ollama")
+            || models.find((item) => item.id === defaultHfModel && item.source === "huggingface")
+            || models[0];
+          await selectModel(preferred);
+        } else if (selected) {
+          const current = models.find((item) => item.id === selected.id && item.source === selected.source);
+          if (current) {
+            await selectModel(current);
+          }
+        }
+      }
+
+      async function selectModel(item) {
+        selected = item;
+        renderModels();
+        selectedTitleNode.textContent = item.title;
+        selectedSubNode.textContent = `Source: ${item.source}. Pulling metadata and inspector details for ${item.title}.`;
+        sourceSelect.value = item.source;
+        statusNode.textContent = "Loading model detail...";
+
+        const response = await fetch(`/api/explorer/models/${encodeURIComponent(item.source)}/${encodeURIComponent(item.id)}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Could not load model detail");
+        }
+
+        detail = data;
+        renderSummary();
+        renderTab();
+        statusNode.textContent = "Ready.";
+      }
+
+      async function runPlayground() {
+        if (!selected) {
+          return;
+        }
+
+        outputNode.textContent = "Running prompt...";
+        statusNode.textContent = "Generating...";
+
+        const response = await fetch("/api/explorer/playground", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: sourceSelect.value,
+            model: selected.id,
+            prompt: promptInput.value,
+            system_prompt: systemInput.value,
+            temperature: Number(temperatureInput.value),
+            max_new_tokens: Number(maxTokensInput.value),
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          outputNode.textContent = data.detail || "Playground request failed.";
+          statusNode.textContent = "Request failed.";
+          return;
+        }
+
+        outputNode.textContent = data.output || "";
+        statusNode.textContent = "Done.";
+      }
+
+      document.getElementById("refresh-models").addEventListener("click", () => {
+        loadModels().catch((error) => {
+          statusNode.textContent = error.message;
+        });
+      });
+
+      document.getElementById("run-playground").addEventListener("click", () => {
+        runPlayground().catch((error) => {
+          outputNode.textContent = error.message;
+          statusNode.textContent = "Request failed.";
+        });
+      });
+
+      document.querySelectorAll(".tab").forEach((button) => {
+        button.addEventListener("click", () => {
+          activeTab = button.dataset.tab;
+          renderTab();
+        });
+      });
+
+      loadModels().catch((error) => {
+        statusNode.textContent = error.message;
+      });
+    </script>
+  </body>
+</html>
