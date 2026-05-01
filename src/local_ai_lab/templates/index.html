@@ -4,6 +4,22 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Local AI Lab</title>
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [["\\(", "\\)"]],
+          displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+          processEscapes: true,
+        },
+        options: {
+          skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+        },
+        startup: {
+          typeset: false,
+        },
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
     <style>
       :root {
         color-scheme: light;
@@ -300,6 +316,42 @@
         margin-bottom: 0;
       }
 
+      .message-body h1,
+      .message-body h2,
+      .message-body h3 {
+        margin: 0.9em 0 0.45em;
+        line-height: 1.2;
+      }
+
+      .message-body h1 {
+        font-size: 1.35rem;
+      }
+
+      .message-body h2 {
+        font-size: 1.18rem;
+      }
+
+      .message-body h3 {
+        font-size: 1.04rem;
+      }
+
+      .message-body ul,
+      .message-body ol {
+        margin: 0 0 0.9em;
+        padding-left: 1.35em;
+      }
+
+      .message-body li {
+        margin: 0.28em 0;
+      }
+
+      .message-body blockquote {
+        margin: 0.9em 0;
+        padding: 0.1em 0 0.1em 1em;
+        border-left: 3px solid rgba(15, 118, 110, 0.36);
+        color: var(--muted);
+      }
+
       .message-body pre {
         margin: 0.9em 0;
         padding: 14px;
@@ -317,6 +369,36 @@
         padding: 0.1em 0.35em;
         border-radius: 8px;
         background: rgba(29, 26, 22, 0.08);
+      }
+
+      .message-body table {
+        width: 100%;
+        margin: 0.9em 0;
+        border-collapse: collapse;
+        font-size: 0.94rem;
+      }
+
+      .message-body th,
+      .message-body td {
+        padding: 8px 10px;
+        border: 1px solid rgba(29, 26, 22, 0.12);
+        vertical-align: top;
+      }
+
+      .message-body th {
+        background: rgba(15, 118, 110, 0.08);
+        text-align: left;
+      }
+
+      .message-body mjx-container {
+        overflow-x: auto;
+        overflow-y: hidden;
+        max-width: 100%;
+        padding: 0.1em 0;
+      }
+
+      .message-body mjx-container[display="true"] {
+        margin: 0.85em 0;
       }
 
       .sources {
@@ -700,13 +782,132 @@
           .replaceAll("'", "&#39;");
       }
 
+      function protectMath(text) {
+        const math = [];
+        const patterns = [
+          /\$\$[\s\S]+?\$\$/g,
+          /\\\[[\s\S]+?\\\]/g,
+          /\\\([\s\S]+?\\\)/g,
+        ];
+
+        let protectedText = text;
+        for (const pattern of patterns) {
+          protectedText = protectedText.replace(pattern, (match) => {
+            const token = `%%MATH${math.length}%%`;
+            math.push(match);
+            return token;
+          });
+        }
+
+        return { text: protectedText, math };
+      }
+
+      function restoreMath(html, math) {
+        return html.replace(/%%MATH(\d+)%%/g, (match, index) => {
+          const value = math[Number(index)];
+          return typeof value === "string" ? escapeHtml(value) : match;
+        });
+      }
+
+      function normalizeMathDelimiters(text) {
+        const protectedMath = protectMath(text);
+        let normalized = protectedMath.text;
+
+        normalized = normalized
+          .split("\n")
+          .map((line) => {
+            const trimmed = line.trim();
+            const singleDollarEquation = trimmed.match(/^\$([^$]+)\$$/);
+            if (
+              singleDollarEquation &&
+              /^\\[A-Za-z]+/.test(singleDollarEquation[1].trim()) &&
+              /[=^_]|\\frac|\\cdot|\\dot|\\mathbf|\\zeta|\\phi|\\omega/.test(singleDollarEquation[1])
+            ) {
+              return line.replace(trimmed, () => "$$" + singleDollarEquation[1].trim() + "$$");
+            }
+
+            const looksLikeBareMath =
+              /^\\[A-Za-z]+/.test(trimmed) &&
+              /[=^_]|\\frac|\\cdot|\\dot|\\mathbf|\\zeta|\\phi|\\omega/.test(trimmed);
+            if (looksLikeBareMath) {
+              return line.replace(trimmed, () => "$$" + trimmed + "$$");
+            }
+            return line;
+          })
+          .join("\n");
+
+        const displayProtected = protectMath(normalized);
+        normalized = displayProtected.text.replace(/(^|[\s([{])\$([^$\n]+?)\$(?=([\s.,;:!?)}\]]|$))/g, (_match, prefix, math) => {
+          return `${prefix}\\(${math}\\)`;
+        });
+        normalized = restoreMath(normalized, displayProtected.math);
+
+        return restoreMath(normalized, protectedMath.math);
+      }
+
       function formatInlineMarkdown(text) {
-        let formatted = escapeHtml(text);
+        text = normalizeMathDelimiters(text);
+        const protectedMath = protectMath(text);
+        let formatted = escapeHtml(protectedMath.text);
         formatted = formatted.replace(/`([^`]+)`/g, "<code>$1</code>");
         formatted = formatted.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
         formatted = formatted.replace(/\*([^*]+)\*/g, "<em>$1</em>");
         formatted = formatted.replace(/_([^_]+)_/g, "<em>$1</em>");
-        return formatted.replaceAll("\n", "<br />");
+        return restoreMath(formatted, protectedMath.math);
+      }
+
+      function isTableRow(line) {
+        return /^\s*\|.+\|\s*$/.test(line);
+      }
+
+      function isTableDivider(line) {
+        return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+      }
+
+      function formatTable(lines) {
+        const rows = lines
+          .filter((line) => !isTableDivider(line))
+          .map((line) => line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()));
+
+        if (!rows.length) {
+          return "";
+        }
+
+        const [header, ...body] = rows;
+        const head = `<thead><tr>${header.map((cell) => `<th>${formatInlineMarkdown(cell)}</th>`).join("")}</tr></thead>`;
+        const bodyRows = body
+          .map((row) => `<tr>${row.map((cell) => `<td>${formatInlineMarkdown(cell)}</td>`).join("")}</tr>`)
+          .join("");
+        return `<table>${head}<tbody>${bodyRows}</tbody></table>`;
+      }
+
+      function formatMarkdownBlock(block) {
+        const lines = block.split("\n");
+
+        if (lines.length >= 2 && isTableRow(lines[0]) && isTableDivider(lines[1])) {
+          return formatTable(lines);
+        }
+
+        if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
+          return `<ul>${lines.map((line) => `<li>${formatInlineMarkdown(line.replace(/^\s*[-*]\s+/, ""))}</li>`).join("")}</ul>`;
+        }
+
+        if (lines.every((line) => /^\s*\d+\.\s+/.test(line))) {
+          return `<ol>${lines.map((line) => `<li>${formatInlineMarkdown(line.replace(/^\s*\d+\.\s+/, ""))}</li>`).join("")}</ol>`;
+        }
+
+        if (lines.every((line) => /^\s*>\s?/.test(line))) {
+          const quote = lines.map((line) => line.replace(/^\s*>\s?/, "")).join("\n");
+          return `<blockquote>${formatInlineMarkdown(quote).replaceAll("\n", "<br />")}</blockquote>`;
+        }
+
+        const heading = block.match(/^(#{1,3})\s+(.+)$/);
+        if (heading) {
+          const level = heading[1].length;
+          return `<h${level}>${formatInlineMarkdown(heading[2])}</h${level}>`;
+        }
+
+        return `<p>${formatInlineMarkdown(block).replaceAll("\n", "<br />")}</p>`;
       }
 
       function formatMessage(content) {
@@ -726,10 +927,19 @@
               .trim()
               .split(/\n{2,}/)
               .filter(Boolean)
-              .map((paragraph) => `<p>${formatInlineMarkdown(paragraph)}</p>`)
+              .map((paragraph) => formatMarkdownBlock(paragraph))
               .join("");
           })
           .join("");
+      }
+
+      function typesetMath() {
+        if (!window.MathJax?.startup?.promise) {
+          return;
+        }
+        window.MathJax.startup.promise
+          .then(() => window.MathJax.typesetPromise([conversationNode]))
+          .catch((error) => console.error(error));
       }
 
       function renderConversation() {
@@ -799,6 +1009,7 @@
 
         metaNode.textContent = `${chat.messages.length} messages`;
         conversationNode.scrollTop = conversationNode.scrollHeight;
+        typesetMath();
       }
 
       function renderModelOptions(models, preferredModel) {

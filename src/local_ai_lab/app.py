@@ -349,7 +349,11 @@ async def chat(payload: ChatRequest) -> ChatResponse:
             raise HTTPException(status_code=502, detail=f"PDF library search failed: {exc}") from exc
 
         if grounding:
-            grounding_sections.append(grounding)
+            grounding_sections.append(
+                "PDF library mode is active. The retrieved local-library context below is authoritative "
+                "for this turn. Follow its required response rules exactly.\n"
+                + grounding
+            )
             sources.extend(pdf_sources)
 
     if grounding_sections:
